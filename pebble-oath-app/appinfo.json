@@ -1,0 +1,15 @@
+{
+  "uuid": "8e5f0dc4-93a9-43d6-a79a-1ed0bfef5f4f",
+  "shortName": "OATH Client",
+  "longName": "OATH Client",
+  "companyName": "JoeCOM",
+  "versionCode": 0,
+  "versionLabel": "0.1.0",
+  "watchapp": {
+    "watchface": false
+  },
+  "appKeys": {},
+  "resources": {
+    "media": []
+  }
+}
