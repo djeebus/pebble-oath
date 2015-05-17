@@ -7,9 +7,11 @@ import com.getpebble.android.kit.PebbleKit;
 import com.getpebble.android.kit.util.PebbleDictionary;
 
 import android.app.Service;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.os.IBinder;
+import android.os.SystemClock;
 import android.util.Log;
 
 public class PebbleLinkService extends Service {
@@ -33,13 +35,23 @@ public class PebbleLinkService extends Service {
 	}
 
 	private PebbleKit.PebbleDataReceiver _dataReceiver;
+	private PebbleKit.PebbleAckReceiver _ackReceiver;
+	private PebbleKit.PebbleNackReceiver _nackReceiver;
+	private BroadcastReceiver _connectedReceiver;
+
 	private TokenInfo[] _tokens;
 	private TokenRepository _tokenRepository;
+
+	private int _transactionId = 0;
 	
 	public PebbleLinkService() {
 		_tokenRepository = new TokenRepository();
 	}
-	
+
+	private int getNextTransactionId() {
+		return _transactionId++;
+	}
+
 	@Override
 	public int onStartCommand(Intent intent, int flags, int startId) {
 		Context context = this.getBaseContext();
@@ -70,7 +82,8 @@ public class PebbleLinkService extends Service {
 		return Service.START_STICKY;
 	}
 	
-	private void copyDatabase(String remoteFilename, String localFilename) throws IOException, InterruptedException {
+	private void copyDatabase(String remoteFilename, String localFilename)
+			throws IOException, InterruptedException {
 		String[] commandLine = { 
 			"su", 
 			"-c",
@@ -88,7 +101,8 @@ public class PebbleLinkService extends Service {
 	private void initializePebbleDataReceiver() {
 		_dataReceiver = new PebbleKit.PebbleDataReceiver(APP_ID) {
             @Override
-            public void receiveData(final Context context, final int transactionId, final PebbleDictionary data) {
+            public void receiveData(final Context context, final int transactionId,
+									final PebbleDictionary data) {
             	Log.i(TAG, "Received data");
             	PebbleKit.sendAckToPebble(context, transactionId);
             	
@@ -108,29 +122,63 @@ public class PebbleLinkService extends Service {
         };
         
         PebbleKit.registerReceivedDataHandler(this, _dataReceiver);
+
+		_ackReceiver = new PebbleKit.PebbleAckReceiver(APP_ID) {
+
+			@Override
+			public void receiveAck(Context context, int i) {
+				Log.i(TAG, String.format("Received ACK %d", i));
+			}
+		};
+		PebbleKit.registerReceivedAckHandler(this, _ackReceiver);
+
+		_connectedReceiver = new BroadcastReceiver() {
+			@Override
+			public void onReceive(Context context, Intent intent) {
+				Log.i(TAG, "Pebble connected!");
+			}
+		};
+		PebbleKit.registerPebbleConnectedReceiver(this, _connectedReceiver);
+
+		_nackReceiver = new PebbleKit.PebbleNackReceiver(APP_ID) {
+			@Override
+			public void receiveNack(Context context, int i) {
+				Log.i(TAG, String.format("Nack: %d", i));
+			}
+		};
+		PebbleKit.registerReceivedNackHandler(this, _nackReceiver);
 	}
 	
 	@Override
 	public void onDestroy() {
-		unregisterReceiver(_dataReceiver);
-		_dataReceiver = null;
+		unregisterReceiver(_dataReceiver);			_dataReceiver = null;
+		unregisterReceiver(_nackReceiver);			_nackReceiver = null;
+		unregisterReceiver(_ackReceiver);			_ackReceiver = null;
+		unregisterReceiver(_connectedReceiver);		_connectedReceiver = null;
 
 		super.onDestroy();
 	}
 
 	protected void handleGetNamesCommand(PebbleDictionary request) {
-		Context context = getBaseContext();
+		Context context = getApplicationContext();
 		OathCalculator calculator = new OathCalculator(context);
 
 		for (TokenInfo token : _tokens) {
+			Log.i(TAG, String.format("Sending %s", token.getEmail()));
 			PebbleDictionary response = new PebbleDictionary();
 			response.addUint8(OATH_KEY_APPEND, token.getId());
 			response.addString(OATH_KEY_NAME, token.getEmail());
 
 			OathCalculator.CodeInfo code = calculator.calculate(token);
 			response.addString(OATH_KEY_CODE, code.getCode());
-			//response.addString(OATH_KEY_EXPIRATION, code.getExpiration());
-			PebbleKit.sendDataToPebble(getApplicationContext(), APP_ID, response);
+			response.addString(OATH_KEY_EXPIRATION, code.getExpiration().toString());
+
+			PebbleKit.sendDataToPebbleWithTransactionId(
+					context, APP_ID, response, getNextTransactionId());
+
+			Log.i(TAG, String.format("Sent %s", token.getEmail()));
+
+			SystemClock.sleep(250);
 		}
 	}
 }
