@@ -34,6 +34,7 @@ static int s_item_count = 0;
 
 static OathListItem* get_oath_list_item_at_index(int index) {
 	if (index < 0 || index >= MAX_ITEMS) {
+		APP_LOG(APP_LOG_LEVEL_WARNING, "invalid list index");
 		return NULL;
 	}
 
@@ -56,6 +57,7 @@ static void draw_row_callback(GContext* ctx, Layer *cell_layer, MenuIndex *cell_
 	const int index = cell_index->row;
 
 	if ((item = get_oath_list_item_at_index(index)) == NULL) {
+		APP_LOG(APP_LOG_LEVEL_INFO, "couldn't find list item at %d", index);
 		return;
 	}
 
@@ -85,6 +87,7 @@ static void window_load(Window *window) {
 
 
 static void oath_list_append(uint id, char *name, char *code) {
+	APP_LOG(APP_LOG_LEVEL_INFO, "adding item ... ");
 	if (s_item_count == MAX_LIST_ITEMS) {
 		APP_LOG(APP_LOG_LEVEL_WARNING, "too many items");
 		return;
@@ -105,10 +108,12 @@ static void in_received_handler(DictionaryIterator *iter, void *context) {
 	Tuple *code_tuple = dict_find(iter, OATH_KEY_CODE);
 
   	if (append_tuple && name_tuple) {
-    	oath_list_append(
-    		append_tuple->value->uint8, 
-    		name_tuple->value->cstring,
-    		code_tuple->value->cstring);
+    		oath_list_append(
+    			append_tuple->value->uint8,
+	    		name_tuple->value->cstring,
+    			code_tuple->value->cstring);
+	} else {
+		APP_LOG(APP_LOG_LEVEL_WARNING, "couldn't find tuples");
 	}
 
 	menu_layer_reload_data(menu_layer);
@@ -119,7 +124,12 @@ static void app_message_init() {
 
 	app_comm_set_sniff_interval(SNIFF_INTERVAL_REDUCED);
 
-	app_message_open(64, 16);
+	uint32_t inbox = app_message_inbox_size_maximum();
+	uint32_t outbox = app_message_outbox_size_maximum();
+
+	APP_LOG(APP_LOG_LEVEL_DEBUG_VERBOSE, "app_message_open(%lu,%lu)", inbox, outbox);
+
+	app_message_open(inbox, outbox);
 
 	app_message_register_inbox_received(in_received_handler);
 }
@@ -158,6 +168,7 @@ int main() {
 	// prepare app
 	window = window_create();
 	app_message_init();
+
 	window_set_window_handlers(window, (WindowHandlers) {
 		.load = window_load,
 		.appear = window_appear,
