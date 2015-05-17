@@ -1,0 +1,9 @@
+<resources>
+    <string name="app_name">PebbleOATH</string>
+    <string name="title_activity_dashboard_activity2">DashboardActivity2</string>
+
+    <string name="hello_world">Hello world!</string>
+    <string name="action_settings">Settings</string>
+    <string name="service_status">Status: </string>
+    <string name="serviceDescription">PebbleOATH Service</string>
+</resources>
